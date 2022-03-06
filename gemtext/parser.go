@@ -3,7 +3,6 @@ package gemtext
 import (
 	"bufio"
 	"bytes"
-	"fmt"
 	"log"
 	"net/url"
 	"strings"
@@ -22,9 +21,10 @@ type Gemtext struct {
 	Links       []string
 }
 
+// Parse returns lines, links and line mapping for each line
 func Parse(text, path string) (Gemtext, error) {
 	lines, links, lineMap := breakdown(text)
-
+	var parsedLinks []string
 	for _, v := range links {
 		v = strings.Trim(v, "=>")
 		v = strings.TrimSpace(v)
@@ -40,14 +40,14 @@ func Parse(text, path string) (Gemtext, error) {
 			if l.Host == "" {
 				link = path + l.Path
 			}
-			fmt.Println(link)
+			parsedLinks = append(parsedLinks, link)
 		}
 	}
 
 	return Gemtext{
 		Lines:       lines,
 		LineTypeMap: lineMap,
-		Links:       links,
+		Links:       parsedLinks,
 	}, nil
 }
 
