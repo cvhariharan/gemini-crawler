@@ -21,7 +21,7 @@ type Gemtext struct {
 	Links       []string
 }
 
-// Parse returns lines, links and line mapping for each line
+// Parse returns lines, links and line mapping for each line. Only returns gemini links
 func Parse(text, path string) (Gemtext, error) {
 	lines, links, lineMap := breakdown(text)
 	var parsedLinks []string
@@ -40,7 +40,10 @@ func Parse(text, path string) (Gemtext, error) {
 			if l.Host == "" {
 				link = path + l.Path
 			}
-			parsedLinks = append(parsedLinks, link)
+
+			if l.Scheme == "gemini" {
+				parsedLinks = append(parsedLinks, link)
+			}
 		}
 	}
 
