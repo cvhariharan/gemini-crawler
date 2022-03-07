@@ -1,22 +1,42 @@
 package main
 
 import (
-	"container/list"
+	"fmt"
 	"io/ioutil"
+	"log"
+	"sync"
 
 	"github.com/cvhariharan/gemini-crawler/gemini"
 	"github.com/cvhariharan/gemini-crawler/gemtext"
 )
 
 func main() {
-	client := gemini.NewClient(gemini.ClientOptions{Insecure: true})
-	resp, _ := client.Fetch("gemini://gemini.circumlunar.space/")
-	txt, _ := ioutil.ReadAll(resp.Body)
+	var wg sync.WaitGroup
+	q := NewQueue()
+	q.Enqueue("gemini://gemini.circumlunar.space/")
 
-	q := Queue{Q: list.New()}
-	g, _ := gemtext.Parse(string(txt), "gemini://gemini.circumlunar.space/")
-	for _, v := range g.Links {
-		q.Enqueue(v)
-	}
+	wg.Add(1)
+	go func(q *Queue) {
+		client := gemini.NewClient(gemini.ClientOptions{Insecure: true})
+		for q.Q.Len() != 0 {
+			path := q.Dequeue()
+			fmt.Println(path)
+			resp, err := client.Fetch(path)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+			txt, _ := ioutil.ReadAll(resp.Body)
+			g, _ := gemtext.Parse(string(txt), path)
+			for _, v := range g.Links {
+				if !q.IsAdded(v) {
+					q.Enqueue(v)
+				}
+			}
+		}
+		wg.Done()
+	}(q)
+
+	wg.Wait()
 	q.PrintAll()
 }

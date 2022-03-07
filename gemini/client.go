@@ -56,7 +56,8 @@ func (c *Client) Connect(uri string) (*Request, error) {
 	if err != nil {
 		return nil, err
 	}
-	conn, err := tls.Dial("tcp", url, &config)
+
+	conn, err := tls.DialWithDialer(&net.Dialer{Timeout: 10 * time.Second}, "tcp", url, &config)
 	if err != nil {
 		return nil, err
 	}
