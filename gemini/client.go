@@ -1,12 +1,16 @@
 package gemini
 
 import (
+	"bufio"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net"
 	"net/url"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -73,12 +77,27 @@ func (c *Client) Fetch(path string) (*Response, error) {
 	}
 
 	fmt.Fprintf(req.Conn, "%s\r\n", path)
-	// message, err := ioutil.ReadAll(req.Conn)
-	// if err != nil {
-	// 	log.Println(err)
-	// }
-	// fmt.Println(string(message))
-	return &Response{
-		Body: req.Conn,
-	}, nil
+	scanner := bufio.NewScanner(req.Conn)
+	ok := scanner.Scan()
+	if ok {
+		header := scanner.Text()
+		fields := strings.Fields(header)
+
+		if len(fields) > 1 {
+			status, err := strconv.Atoi(fields[0])
+			if err != nil {
+				log.Println(err)
+				return nil, err
+			}
+			meta := fields[1]
+
+			return &Response{
+				Body:   req.Conn,
+				Status: status,
+				Meta:   meta,
+			}, nil
+		}
+	}
+
+	return nil, errors.New("header not found")
 }

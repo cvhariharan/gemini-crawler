@@ -35,6 +35,7 @@ func Parse(text, path string) (Gemtext, error) {
 			l, err := url.Parse(link)
 			if err != nil {
 				log.Println(err)
+				continue
 			}
 
 			if l.Host == "" {

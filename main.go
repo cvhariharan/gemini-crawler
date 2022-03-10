@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"net/http"
+	_ "net/http/pprof"
 	"sync"
 
-	"github.com/blevesearch/bleve"
+	"github.com/blevesearch/bleve/v2"
 	"github.com/cvhariharan/gemini-crawler/gemini"
 	"github.com/cvhariharan/gemini-crawler/gemtext"
 )
@@ -50,6 +52,8 @@ func main() {
 		}
 		wg.Done()
 	}(q)
+
+	log.Fatal(http.ListenAndServe(":8080", nil))
 
 	wg.Wait()
 	q.PrintAll()
