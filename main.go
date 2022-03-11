@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"net/http"
-	_ "net/http/pprof"
 	"sync"
 
 	"github.com/blevesearch/bleve/v2"
@@ -40,20 +38,21 @@ func main() {
 				log.Println(err)
 				continue
 			}
-			txt, _ := ioutil.ReadAll(resp.Body)
-			g, _ := gemtext.Parse(string(txt), path)
-			for _, v := range g.Links {
-				if !q.IsAdded(v) {
-					q.Enqueue(v)
-				}
-			}
 
-			index.Index(path, Data{Path: path, Text: string(txt)})
+			if resp.Meta == "text/gemini" {
+				txt, _ := ioutil.ReadAll(resp.Body)
+				g, _ := gemtext.Parse(string(txt), path)
+				for _, v := range g.Links {
+					if !q.IsAdded(v) {
+						q.Enqueue(v)
+					}
+				}
+
+				index.Index(path, Data{Path: path, Text: string(txt)})
+			}
 		}
 		wg.Done()
 	}(q)
-
-	log.Fatal(http.ListenAndServe(":8080", nil))
 
 	wg.Wait()
 	q.PrintAll()
