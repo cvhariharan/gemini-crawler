@@ -21,9 +21,9 @@ type Gemtext struct {
 	Links       []string
 }
 
-// Parse returns lines, links and line mapping for each line. Only returns gemini links
-func Parse(text, path string) (Gemtext, error) {
-	lines, links, lineMap := breakdown(text)
+// GetLinks returns only gemini links
+func GetLinks(text, path string) ([]string, error) {
+	_, links, _ := breakdown(text)
 	var parsedLinks []string
 	for _, v := range links {
 		v = strings.Trim(v, "=>")
@@ -48,11 +48,7 @@ func Parse(text, path string) (Gemtext, error) {
 		}
 	}
 
-	return Gemtext{
-		Lines:       lines,
-		LineTypeMap: lineMap,
-		Links:       parsedLinks,
-	}, nil
+	return parsedLinks, nil
 }
 
 func breakdown(text string) ([]string, []string, map[string]string) {
