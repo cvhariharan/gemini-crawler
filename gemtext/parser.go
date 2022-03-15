@@ -32,6 +32,7 @@ func GetLinks(text, path string) ([]string, error) {
 		linkParts := strings.Fields(v)
 		if len(linkParts) > 0 {
 			link := linkParts[0]
+
 			l, err := url.Parse(link)
 			if err != nil {
 				log.Println(err)
@@ -40,11 +41,17 @@ func GetLinks(text, path string) ([]string, error) {
 
 			if l.Host == "" {
 				link = path + l.Path
+				l, err = url.Parse(link)
+				if err != nil {
+					log.Println(err)
+					continue
+				}
 			}
 
 			if l.Scheme == "gemini" {
 				parsedLinks = append(parsedLinks, link)
 			}
+			log.Println(parsedLinks)
 		}
 	}
 

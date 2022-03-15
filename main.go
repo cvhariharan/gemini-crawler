@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -16,6 +17,7 @@ import (
 const (
 	WORKING_INDEX = "index2"
 	INDEX         = "index"
+	SEED_FILE     = "seeds.txt"
 )
 
 type Data struct {
@@ -34,8 +36,25 @@ func main() {
 	fmt.Println("Index path -", indexPath)
 
 	// Setup seed URLs
+	seeds := []string{"gemini://gemini.circumlunar.space/"}
+	if _, err := os.Stat(SEED_FILE); err == nil {
+		file, err := os.Open(SEED_FILE)
+		if err != nil {
+			log.Fatal("could not read seeds from file, delete or replace the file")
+		}
+		defer file.Close()
+
+		seeds = []string{}
+		scanner := bufio.NewScanner(file)
+		for scanner.Scan() {
+			seeds = append(seeds, scanner.Text())
+		}
+	}
+
 	q := NewQueue()
-	q.Enqueue("gemini://gemini.circumlunar.space/")
+	for _, seed := range seeds {
+		q.Enqueue(seed)
+	}
 
 	removeIfExists(indexPath)
 
@@ -51,7 +70,7 @@ func main() {
 
 	// Rename new index2 to index
 	removeIfExists(filepath.Join(mountPoint, INDEX))
-	err = os.Rename(WORKING_INDEX, INDEX)
+	err = os.Rename(filepath.Join(mountPoint, WORKING_INDEX), filepath.Join(mountPoint, INDEX))
 	if err != nil {
 		log.Println(err)
 	}
@@ -63,7 +82,7 @@ func createIndexer(q *Queue, index bleve.Index) {
 	client := gemini.NewClient(gemini.ClientOptions{Insecure: true})
 	for q.Q.Len() != 0 {
 		path := q.Dequeue()
-		fmt.Println(path)
+		// fmt.Println(path)
 		resp, err := client.Fetch(path)
 		if err != nil {
 			log.Println(err)
