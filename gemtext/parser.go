@@ -51,7 +51,6 @@ func GetLinks(text, path string) ([]string, error) {
 			if l.Scheme == "gemini" {
 				parsedLinks = append(parsedLinks, link)
 			}
-			log.Println(parsedLinks)
 		}
 	}
 

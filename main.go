@@ -82,7 +82,7 @@ func createIndexer(q *Queue, index bleve.Index) {
 	client := gemini.NewClient(gemini.ClientOptions{Insecure: true})
 	for q.Q.Len() != 0 {
 		path := q.Dequeue()
-		// fmt.Println(path)
+		log.Println(path)
 		resp, err := client.Fetch(path)
 		if err != nil {
 			log.Println(err)
