@@ -22,6 +22,8 @@ const (
 	WORKERS       = 5
 )
 
+var LinkLock sync.Mutex
+
 type Data struct {
 	Path string
 	Text string
@@ -102,15 +104,20 @@ func createIndexer(c chan string, index bleve.Index, q *Queue, wg *sync.WaitGrou
 			txt, _ := ioutil.ReadAll(resp.Body)
 			links, _ := gemtext.GetLinks(string(txt), path)
 			for _, v := range links {
-				if !q.IsAdded(v) {
-					q.Visit(v)
-					c <- v
-				}
+				go func(v string) {
+					LinkLock.Lock()
+					defer LinkLock.Unlock()
+					if !q.IsAdded(v) {
+						q.Visit(v)
+						c <- v
+					}
+				}(v)
 			}
 
 			index.Index(path, Data{Path: path, Text: string(txt)})
 		}
 	}
+	wg.Done()
 }
 
 func removeIfExists(src string) {
