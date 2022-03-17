@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/blevesearch/bleve/v2"
@@ -18,6 +19,7 @@ const (
 	WORKING_INDEX = "index2"
 	INDEX         = "index"
 	SEED_FILE     = "seeds.txt"
+	WORKERS       = 5
 )
 
 type Data struct {
@@ -26,6 +28,7 @@ type Data struct {
 }
 
 func main() {
+	var wg sync.WaitGroup
 	mountPoint := os.Getenv("AWS_EFS_MOUNT")
 	if mountPoint == "" {
 		log.Fatal("mount point not set. AWS_EFS_MOUNT empty")
@@ -51,10 +54,8 @@ func main() {
 		}
 	}
 
+	c := make(chan string, 100)
 	q := NewQueue()
-	for _, seed := range seeds {
-		q.Enqueue(seed)
-	}
 
 	removeIfExists(indexPath)
 
@@ -65,8 +66,17 @@ func main() {
 	}
 
 	start := time.Now()
-	createIndexer(q, index)
+	for i := 0; i < WORKERS; i++ {
+		wg.Add(1)
+		go createIndexer(c, index, q, &wg)
+	}
 	end := time.Now()
+
+	for _, v := range seeds {
+		c <- v
+	}
+
+	wg.Wait()
 
 	// Rename new index2 to index
 	removeIfExists(filepath.Join(mountPoint, INDEX))
@@ -78,10 +88,9 @@ func main() {
 	fmt.Printf("Indexing complete in %f minutes\n", end.Sub(start).Minutes())
 }
 
-func createIndexer(q *Queue, index bleve.Index) {
+func createIndexer(c chan string, index bleve.Index, q *Queue, wg *sync.WaitGroup) {
 	client := gemini.NewClient(gemini.ClientOptions{Insecure: true})
-	for q.Q.Len() != 0 {
-		path := q.Dequeue()
+	for path := range c {
 		log.Println(path)
 		resp, err := client.Fetch(path)
 		if err != nil {
@@ -94,7 +103,8 @@ func createIndexer(q *Queue, index bleve.Index) {
 			links, _ := gemtext.GetLinks(string(txt), path)
 			for _, v := range links {
 				if !q.IsAdded(v) {
-					q.Enqueue(v)
+					q.Visit(v)
+					c <- v
 				}
 			}
 
