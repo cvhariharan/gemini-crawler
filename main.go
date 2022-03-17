@@ -57,6 +57,7 @@ func main() {
 	}
 
 	c := make(chan string, 100)
+	indexChan := make(chan Data, 100)
 	q := NewQueue()
 
 	removeIfExists(indexPath)
@@ -68,17 +69,18 @@ func main() {
 	}
 
 	start := time.Now()
+	go indexer(indexChan, index, &wg)
 	for i := 0; i < WORKERS; i++ {
 		wg.Add(1)
-		go createIndexer(c, index, q, &wg)
+		go createCrawler(c, indexChan, q, &wg)
 	}
-	end := time.Now()
 
 	for _, v := range seeds {
 		c <- v
 	}
 
 	wg.Wait()
+	close(indexChan)
 
 	// Rename new index2 to index
 	removeIfExists(filepath.Join(mountPoint, INDEX))
@@ -87,10 +89,12 @@ func main() {
 		log.Println(err)
 	}
 
+	end := time.Now()
+
 	fmt.Printf("Indexing complete in %f minutes\n", end.Sub(start).Minutes())
 }
 
-func createIndexer(c chan string, index bleve.Index, q *Queue, wg *sync.WaitGroup) {
+func createCrawler(c chan string, indexChan chan Data, q *Queue, wg *sync.WaitGroup) {
 	client := gemini.NewClient(gemini.ClientOptions{Insecure: true})
 	for path := range c {
 		log.Println(path)
@@ -114,10 +118,18 @@ func createIndexer(c chan string, index bleve.Index, q *Queue, wg *sync.WaitGrou
 				}(v)
 			}
 
-			index.Index(path, Data{Path: path, Text: string(txt)})
+			go func() {
+				indexChan <- Data{Path: path, Text: string(txt)}
+			}()
 		}
 	}
 	wg.Done()
+}
+
+func indexer(indexChan chan Data, index bleve.Index, wg *sync.WaitGroup) {
+	for v := range indexChan {
+		index.Index(v.Path, v)
+	}
 }
 
 func removeIfExists(src string) {
