@@ -13,6 +13,7 @@ import (
 	"github.com/blevesearch/bleve/v2"
 	"github.com/cvhariharan/gemini-crawler/gemini"
 	"github.com/cvhariharan/gemini-crawler/gemtext"
+	"github.com/cvhariharan/gemini-crawler/utils"
 )
 
 const (
@@ -37,7 +38,8 @@ func main() {
 	}
 
 	// Create a new index at mountpoint/index2
-	indexPath := filepath.Join(mountPoint, WORKING_INDEX)
+	workingIndex := "index-" + time.Now().Format("2006-01-02-150405")
+	indexPath := filepath.Join(mountPoint, workingIndex)
 	fmt.Println("Index path -", indexPath)
 
 	// Setup seed URLs
@@ -56,9 +58,9 @@ func main() {
 		}
 	}
 
-	c := make(chan string, 100)
-	indexChan := make(chan Data, 100)
-	q := NewQueue()
+	c := make(chan string, 200)
+	indexChan := make(chan Data, 200)
+	q := utils.NewIndexSet()
 
 	removeIfExists(indexPath)
 
@@ -83,18 +85,18 @@ func main() {
 	close(indexChan)
 
 	// Rename new index2 to index
-	removeIfExists(filepath.Join(mountPoint, INDEX))
-	err = os.Rename(filepath.Join(mountPoint, WORKING_INDEX), filepath.Join(mountPoint, INDEX))
-	if err != nil {
-		log.Println(err)
-	}
+	// removeIfExists(filepath.Join(mountPoint, INDEX))
+	// err = os.Rename(filepath.Join(mountPoint, WORKING_INDEX), filepath.Join(mountPoint, INDEX))
+	// if err != nil {
+	// 	log.Println(err)
+	// }
 
 	end := time.Now()
 
 	fmt.Printf("Indexing complete in %f minutes\n", end.Sub(start).Minutes())
 }
 
-func createCrawler(c chan string, indexChan chan Data, q *Queue, wg *sync.WaitGroup) {
+func createCrawler(c chan string, indexChan chan Data, q utils.VisitedSet, wg *sync.WaitGroup) {
 	client := gemini.NewClient(gemini.ClientOptions{Insecure: true})
 	for path := range c {
 		log.Println(path)
@@ -111,7 +113,7 @@ func createCrawler(c chan string, indexChan chan Data, q *Queue, wg *sync.WaitGr
 				go func(v string) {
 					LinkLock.Lock()
 					defer LinkLock.Unlock()
-					if !q.IsAdded(v) {
+					if !q.IsVisited(v) {
 						q.Visit(v)
 						c <- v
 					}
