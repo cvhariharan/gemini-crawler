@@ -9,6 +9,8 @@ import (
 type VisitedSet interface {
 	IsVisited(string) bool
 	Visit(string) error
+	IsIndexed(string) bool
+	Index(string) error
 }
 
 type PersistentSet struct {
@@ -26,6 +28,16 @@ func NewIndexSet() VisitedSet {
 	return &PersistentSet{
 		kv: d,
 	}
+}
+
+// IsIndexer returns true if the contents of the page are added to the index (bleve)
+func (p *PersistentSet) IsIndexed(path string) bool {
+	val, _ := p.kv.Read(path)
+	return string(val) == "2"
+}
+
+func (p *PersistentSet) Index(path string) error {
+	return p.kv.Write(path, []byte("2"))
 }
 
 func (p *PersistentSet) IsVisited(path string) bool {

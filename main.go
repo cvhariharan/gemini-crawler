@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"os"
@@ -31,6 +32,14 @@ type Data struct {
 }
 
 func main() {
+	urlLog, err := os.Create("urls.txt")
+	if err != nil {
+		panic(err)
+	}
+	defer urlLog.Close()
+	mw := io.MultiWriter(os.Stdout, urlLog)
+	urlLogger := log.New(mw, "", 0)
+
 	var wg sync.WaitGroup
 	mountPoint := os.Getenv("AWS_EFS_MOUNT")
 	if mountPoint == "" {
@@ -59,8 +68,10 @@ func main() {
 	}
 
 	c := make(chan string, 200)
-	indexChan := make(chan Data, 200)
 	q := utils.NewIndexSet()
+
+	indexChan := make(chan Data, 200)
+	defer close(indexChan)
 
 	removeIfExists(indexPath)
 
@@ -71,10 +82,10 @@ func main() {
 	}
 
 	start := time.Now()
-	go indexer(indexChan, index, &wg)
+	go indexer(indexChan, index, q, &wg)
 	for i := 0; i < WORKERS; i++ {
 		wg.Add(1)
-		go createCrawler(c, indexChan, q, &wg)
+		go createCrawler(c, indexChan, q, urlLogger, &wg)
 	}
 
 	for _, v := range seeds {
@@ -82,24 +93,19 @@ func main() {
 	}
 
 	wg.Wait()
-	close(indexChan)
-
-	// Rename new index2 to index
-	// removeIfExists(filepath.Join(mountPoint, INDEX))
-	// err = os.Rename(filepath.Join(mountPoint, WORKING_INDEX), filepath.Join(mountPoint, INDEX))
-	// if err != nil {
-	// 	log.Println(err)
-	// }
 
 	end := time.Now()
 
 	fmt.Printf("Indexing complete in %f minutes\n", end.Sub(start).Minutes())
 }
 
-func createCrawler(c chan string, indexChan chan Data, q utils.VisitedSet, wg *sync.WaitGroup) {
+func createCrawler(c chan string, indexChan chan Data, q utils.VisitedSet, urlLogger *log.Logger, wg *sync.WaitGroup) {
 	client := gemini.NewClient(gemini.ClientOptions{Insecure: true})
 	for path := range c {
-		log.Println(path)
+		if q.IsIndexed(path) {
+			continue
+		}
+		urlLogger.Println(path)
 		resp, err := client.Fetch(path)
 		if err != nil {
 			log.Println(err)
@@ -113,7 +119,7 @@ func createCrawler(c chan string, indexChan chan Data, q utils.VisitedSet, wg *s
 				go func(v string) {
 					LinkLock.Lock()
 					defer LinkLock.Unlock()
-					if !q.IsVisited(v) {
+					if !q.IsIndexed(v) {
 						q.Visit(v)
 						c <- v
 					}
@@ -128,9 +134,10 @@ func createCrawler(c chan string, indexChan chan Data, q utils.VisitedSet, wg *s
 	wg.Done()
 }
 
-func indexer(indexChan chan Data, index bleve.Index, wg *sync.WaitGroup) {
+func indexer(indexChan chan Data, index bleve.Index, q utils.VisitedSet, wg *sync.WaitGroup) {
 	for v := range indexChan {
 		index.Index(v.Path, v)
+		q.Index(v.Path)
 	}
 }
 
