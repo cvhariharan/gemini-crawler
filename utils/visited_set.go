@@ -1,9 +1,11 @@
 package utils
 
 import (
+	"log"
 	"strings"
 
 	"github.com/peterbourgon/diskv/v3"
+	"github.com/syndtr/goleveldb/leveldb"
 )
 
 type VisitedSet interface {
@@ -14,38 +16,43 @@ type VisitedSet interface {
 }
 
 type PersistentSet struct {
-	kv *diskv.Diskv
+	db *leveldb.DB
 }
 
 func NewIndexSet() VisitedSet {
-	d := diskv.New(diskv.Options{
-		BasePath:          "kvstore",
-		AdvancedTransform: AdvancedTransform,
-		InverseTransform:  InverseTransform,
-		CacheSizeMax:      1024 * 1024,
-	})
+	db, err := leveldb.OpenFile("kvdb", nil)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	return &PersistentSet{
-		kv: d,
+		db: db,
 	}
 }
 
 // IsIndexer returns true if the contents of the page are added to the index (bleve)
 func (p *PersistentSet) IsIndexed(path string) bool {
-	val, _ := p.kv.Read(path)
-	return string(val) == "2"
+	data, err := p.db.Get([]byte(path), nil)
+	if err != nil && err != leveldb.ErrNotFound {
+		log.Println(err)
+	}
+	return string(data) == "2"
 }
 
 func (p *PersistentSet) Index(path string) error {
-	return p.kv.Write(path, []byte("2"))
+	return p.db.Put([]byte(path), []byte("2"), nil)
 }
 
 func (p *PersistentSet) IsVisited(path string) bool {
-	return p.kv.Has(path)
+	data, err := p.db.Get([]byte(path), nil)
+	if err != nil && err != leveldb.ErrNotFound {
+		log.Println(err)
+	}
+	return string(data) == "1"
 }
 
 func (p *PersistentSet) Visit(path string) error {
-	return p.kv.Write(path, []byte("1"))
+	return p.db.Put([]byte(path), []byte("1"), nil)
 }
 
 func AdvancedTransform(key string) *diskv.PathKey {

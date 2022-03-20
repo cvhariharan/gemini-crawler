@@ -32,6 +32,7 @@ type Data struct {
 }
 
 func main() {
+	log.SetFlags(log.Lshortfile)
 	urlLog, err := os.Create("urls.txt")
 	if err != nil {
 		panic(err)
@@ -130,6 +131,8 @@ func createCrawler(c chan string, indexChan chan Data, q utils.VisitedSet, urlLo
 				indexChan <- Data{Path: path, Text: string(txt)}
 			}()
 		}
+
+		resp.Close()
 	}
 	wg.Done()
 }
