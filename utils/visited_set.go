@@ -2,21 +2,29 @@ package utils
 
 import (
 	"log"
-	"strings"
+	"os"
 
-	"github.com/peterbourgon/diskv/v3"
 	"github.com/syndtr/goleveldb/leveldb"
 )
+
+type Data struct {
+	Path string
+	Text string
+}
 
 type VisitedSet interface {
 	IsVisited(string) bool
 	Visit(string) error
 	IsIndexed(string) bool
 	Index(string) error
+	GetNotIndexed(chan string) error
+	Close()
 }
 
 type PersistentSet struct {
-	db *leveldb.DB
+	db      *leveldb.DB
+	logger  *log.Logger
+	logFile *os.File
 }
 
 func NewIndexSet() VisitedSet {
@@ -25,8 +33,16 @@ func NewIndexSet() VisitedSet {
 		log.Fatal(err)
 	}
 
+	logFile, err := os.Create("indexed.txt")
+	if err != nil {
+		log.Fatal(err)
+	}
+	logger := log.New(logFile, "", 0)
+
 	return &PersistentSet{
-		db: db,
+		db:      db,
+		logger:  logger,
+		logFile: logFile,
 	}
 }
 
@@ -40,6 +56,7 @@ func (p *PersistentSet) IsIndexed(path string) bool {
 }
 
 func (p *PersistentSet) Index(path string) error {
+	p.logger.Println(path)
 	return p.db.Put([]byte(path), []byte("2"), nil)
 }
 
@@ -55,14 +72,22 @@ func (p *PersistentSet) Visit(path string) error {
 	return p.db.Put([]byte(path), []byte("1"), nil)
 }
 
-func AdvancedTransform(key string) *diskv.PathKey {
-	path := strings.Split(key, "/")
-	last := len(path) - 1
-	return &diskv.PathKey{
-		Path:     path[:last],
-		FileName: path[last],
+func (p *PersistentSet) GetNotIndexed(indexChan chan string) error {
+	iter := p.db.NewIterator(nil, nil)
+	for iter.Next() {
+		key := iter.Key()
+		value := iter.Value()
+
+		if string(value) == "1" {
+			log.Println(string(key))
+			indexChan <- string(key)
+		}
 	}
+	iter.Release()
+	return iter.Error()
 }
-func InverseTransform(pathKey *diskv.PathKey) (key string) {
-	return strings.Join(pathKey.Path, "/") + pathKey.FileName
+
+func (p *PersistentSet) Close() {
+	p.db.Close()
+	p.logFile.Close()
 }

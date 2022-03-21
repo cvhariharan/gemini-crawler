@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -25,14 +26,11 @@ const (
 )
 
 var LinkLock sync.Mutex
-
-type Data struct {
-	Path string
-	Text string
-}
+var IndexOnly = flag.Bool("index", false, "Set index only, no new URLs will be added to the queue")
 
 func main() {
-	log.SetFlags(log.Lshortfile)
+	flag.Parse()
+
 	urlLog, err := os.Create("urls.txt")
 	if err != nil {
 		panic(err)
@@ -52,6 +50,36 @@ func main() {
 	indexPath := filepath.Join(mountPoint, workingIndex)
 	fmt.Println("Index path -", indexPath)
 
+	c := make(chan string, 200)
+	q := utils.NewIndexSet()
+	defer q.Close()
+
+	removeIfExists(indexPath)
+
+	mapping := bleve.NewIndexMapping()
+	index, err := bleve.New(indexPath, mapping)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if *IndexOnly {
+		fmt.Println("Indexing only")
+		var wg1 sync.WaitGroup
+		toIndex := make(chan string, 20)
+		defer close(toIndex)
+
+		wg1.Add(1)
+		go indexFeeder(toIndex, index, q, &wg1)
+
+		q.GetNotIndexed(toIndex)
+
+		wg1.Wait()
+		return
+	}
+
+	indexChan := make(chan utils.Data, 200)
+	defer close(indexChan)
+
 	// Setup seed URLs
 	seeds := []string{"gemini://gemini.circumlunar.space/"}
 	if _, err := os.Stat(SEED_FILE); err == nil {
@@ -66,20 +94,6 @@ func main() {
 		for scanner.Scan() {
 			seeds = append(seeds, scanner.Text())
 		}
-	}
-
-	c := make(chan string, 200)
-	q := utils.NewIndexSet()
-
-	indexChan := make(chan Data, 200)
-	defer close(indexChan)
-
-	removeIfExists(indexPath)
-
-	mapping := bleve.NewIndexMapping()
-	index, err := bleve.New(indexPath, mapping)
-	if err != nil {
-		log.Fatal(err)
 	}
 
 	start := time.Now()
@@ -100,7 +114,7 @@ func main() {
 	fmt.Printf("Indexing complete in %f minutes\n", end.Sub(start).Minutes())
 }
 
-func createCrawler(c chan string, indexChan chan Data, q utils.VisitedSet, urlLogger *log.Logger, wg *sync.WaitGroup) {
+func createCrawler(c chan string, indexChan chan utils.Data, q utils.VisitedSet, urlLogger *log.Logger, wg *sync.WaitGroup) {
 	client := gemini.NewClient(gemini.ClientOptions{Insecure: true})
 	for path := range c {
 		if q.IsIndexed(path) {
@@ -128,7 +142,7 @@ func createCrawler(c chan string, indexChan chan Data, q utils.VisitedSet, urlLo
 			}
 
 			go func() {
-				indexChan <- Data{Path: path, Text: string(txt)}
+				indexChan <- utils.Data{Path: path, Text: string(txt)}
 			}()
 		}
 
@@ -137,7 +151,33 @@ func createCrawler(c chan string, indexChan chan Data, q utils.VisitedSet, urlLo
 	wg.Done()
 }
 
-func indexer(indexChan chan Data, index bleve.Index, q utils.VisitedSet, wg *sync.WaitGroup) {
+func indexFeeder(toIndex chan string, index bleve.Index, q utils.VisitedSet, wg *sync.WaitGroup) {
+	indexChan := make(chan utils.Data)
+	defer close(indexChan)
+
+	client := gemini.NewClient(gemini.ClientOptions{Insecure: true})
+
+	go indexer(indexChan, index, q, wg)
+	for url := range toIndex {
+		if q.IsIndexed(url) {
+			continue
+		}
+		resp, err := client.Fetch(url)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		if resp.Meta == "text/gemini" {
+			txt, _ := ioutil.ReadAll(resp.Body)
+			indexChan <- utils.Data{Path: url, Text: string(txt)}
+		}
+		resp.Close()
+	}
+
+	wg.Done()
+}
+
+func indexer(indexChan chan utils.Data, index bleve.Index, q utils.VisitedSet, wg *sync.WaitGroup) {
 	for v := range indexChan {
 		index.Index(v.Path, v)
 		q.Index(v.Path)

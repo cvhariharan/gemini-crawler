@@ -32,3 +32,16 @@ func (s *Set) Index(path string) error {
 	s.i[path] = true
 	return nil
 }
+
+func (s *Set) GetNotIndexed(indexChan chan string) error {
+	for k, v := range s.i {
+		if !v {
+			indexChan <- k
+		}
+	}
+	return nil
+}
+
+func (s *Set) Close() {
+	return
+}
