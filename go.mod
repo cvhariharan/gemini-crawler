@@ -2,7 +2,11 @@ module github.com/cvhariharan/gemini-crawler
 
 go 1.17
 
-require github.com/blevesearch/bleve/v2 v2.3.1
+require (
+	github.com/blevesearch/bleve/v2 v2.3.1
+	github.com/peterbourgon/diskv/v3 v3.0.1
+	github.com/syndtr/goleveldb v1.0.0
+)
 
 require (
 	github.com/RoaringBitmap/roaring v0.9.4 // indirect
@@ -22,6 +26,7 @@ require (
 	github.com/blevesearch/zapx/v15 v15.3.3 // indirect
 	github.com/golang/protobuf v1.3.2 // indirect
 	github.com/golang/snappy v0.0.1 // indirect
+	github.com/google/btree v1.0.0 // indirect
 	github.com/mschoch/smat v0.2.0 // indirect
 	github.com/steveyen/gtreap v0.1.0 // indirect
 	go.etcd.io/bbolt v1.3.5 // indirect

@@ -40,7 +40,7 @@ func GetLinks(text, path string) ([]string, error) {
 			}
 
 			if l.Host == "" {
-				link = path + l.Path
+				link = strings.Trim(path, "/") + "/" + strings.Trim(l.Path, "/")
 				l, err = url.Parse(link)
 				if err != nil {
 					log.Println(err)
